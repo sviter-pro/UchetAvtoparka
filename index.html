@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>Электронный журнал автопарка</title>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: #f4f7fc;
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+    }
+
+    /* Боковое меню - адаптивное */
+    .sidebar {
+      width: 240px;
+      background: #1e2a3a;
+      color: #ecf0f1;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+      transition: transform 0.3s ease;
+      overflow-y: auto;
+    }
+
+    .sidebar.hidden {
+      transform: translateX(-100%);
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #3a4a5a;
+      margin-bottom: 12px;
+    }
+
+    .sidebar h2 {
+      font-weight: 400;
+      font-size: 1.3rem;
+      letter-spacing: 1px;
+    }
+
+    .sidebar-close {
+      background: transparent;
+      border: none;
+      color: #b0c4d9;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: none;
+      padding: 4px 8px;
+    }
+
+    .sidebar button {
+      background: transparent;
+      border: none;
+      color: #b0c4d9;
+      font-size: 1rem;
+      padding: 12px 16px;
+      text-align: left;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.2s;
+      font-weight: 500;
+      width: 100%;
+    }
+
+    .sidebar button:hover {
+      background: #2a3a4a;
+      color: white;
+    }
+
+    .sidebar button.active {
+      background: #2e4b6a;
+      color: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    .menu-toggle {
+      display: none;
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 101;
+      background: #1e2a3a;
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      transition: 0.2s;
+    }
+
+    .menu-toggle:hover {
+      background: #2a3a4a;
+    }
+
+    .menu-toggle:active {
+      transform: scale(0.95);
+    }
+
+    .main {
+      flex: 1;
+      padding: 20px;
+      margin-left: 240px;
+      transition: margin-left 0.3s ease;
+      min-height: 100vh;
+      background: #f4f7fc;
+    }
+
+    .main.full-width {
+      margin-left: 0;
+    }
+
+    .page {
+      display: none;
+      animation: fade 0.2s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fade {
+      0% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 500;
+      margin-bottom: 20px;
+      color: #1e2a3a;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .card-header h3 {
+      font-weight: 500;
+      font-size: 1.1rem;
+      color: #1e2a3a;
+      margin: 0;
+    }
+
+    .card-header .toggle-icon {
+      font-size: 1.2rem;
+      transition: transform 0.3s ease;
+      color: #5a6a7a;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .card-header .toggle-icon:hover {
+      background: rgba(0,0,0,0.05);
+    }
+
+    .card-header .toggle-icon.collapsed {
+      transform: rotate(-90deg);
+    }
+
+    .card-body {
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+      max-height: 500px;
+      opacity: 1;
+      padding-top: 16px;
+    }
+
+    .card-body.collapsed {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      flex: 1 0 140px;
+      min-width: 120px;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #3a4a5a;
+      margin-bottom: 4px;
+    }
+
+    .form-group input,
+    .form-group select {
+      padding: 10px 12px;
+      border: 1px solid #d0d9e5;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      background: #fafcff;
+      transition: 0.15s;
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      color: #1e2a3a;
+    }
+
+    .form-group select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%233a4a5a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #2e6b9e;
+      box-shadow: 0 0 0 3px rgba(46, 107, 158, 0.12);
+    }
+
+    .btn {
+      background: #2a4b6a;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 500;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: 0.15s;
+      white-space: nowrap;
+      touch-action: manipulation;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn:hover {
+      background: #1e3a52;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      border-radius: 20px;
+      margin: 0 2px;
+      min-width: 32px;
+      min-height: 32px;
+    }
+
+    .btn-danger {
+      background: #8b2a2a;
+    }
+
+    .btn-danger:hover {
+      background: #6b1a1a;
+    }
+
+    .btn-success {
+      background: #2a6a4a;
+    }
+
+    .btn-success:hover {
+      background: #1a5a3a;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #b0c4d9;
+      color: #1e2a3a;
+    }
+
+    .btn-outline:hover {
+      background: #e6edf6;
+    }
+
+    .btn-block {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .filter-group select,
+    .filter-group input {
+      padding: 8px 12px;
+      border: 1px solid #d0d9e5;
+      border-radius: 30px;
+      background: white;
+      font-size: 0.85rem;
+      flex: 1;
+      min-width: 100px;
+      -webkit-appearance: none;
+      appearance: none;
+      color: #1e2a3a;
+    }
+
+    .filter-group select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%233a4a5a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -4px;
+      padding: 0 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      min-width: 500px;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 8px;
+      border-bottom: 2px solid #dce3ec;
+      color: #2a3a4a;
+      font-weight: 600;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #e8edf4;
+      color: #1e2a3a;
+      vertical-align: middle;
+      word-break: break-word;
+    }
+
+    .badge {
+      background: #eef3f9;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 4px 4px 4px 0;
+      flex-wrap: wrap;
+      color: #1e2a3a;
+    }
+
+    .badge .action-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: 0.15s;
+      color: #5a6a7a;
+      touch-action: manipulation;
+    }
+
+    .badge .action-btn:active {
+      transform: scale(0.9);
+    }
+
+    .badge .action-btn:hover {
+      background: rgba(0,0,0,0.08);
+      color: #1a2a3a;
+    }
+
+    .badge .action-btn.delete:hover {
+      color: #cc3333;
+    }
+
+    .confirm-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      left: 20px;
+      background: #1e3a2a;
+      color: white;
+      padding: 14px 20px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      font-weight: 500;
+      z-index: 999;
+      animation: slideUp 0.3s ease;
+      max-width: 400px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .error-toast {
+      background: #8b2a2a;
+    }
+
+    @keyframes slideUp {
+      0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .empty-state {
+      color: #7a8a9a;
+      padding: 30px 0;
+      text-align: center;
+      font-size: 0.95rem;
+    }
+
+    .edit-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+      padding: 16px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .edit-modal-content {
+      background: white;
+      padding: 24px;
+      border-radius: 20px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .edit-modal-content h3 {
+      margin-bottom: 20px;
+      font-weight: 500;
+      font-size: 1.2rem;
+      color: #1e2a3a;
+    }
+
+    .edit-modal-content .form-group {
+      margin-bottom: 16px;
+      flex: none;
+      width: 100%;
+    }
+
+    .edit-modal-content .form-group label {
+      color: #3a4a5a;
+    }
+
+    .edit-modal-content .form-group input,
+    .edit-modal-content .form-group select {
+      color: #1e2a3a;
+      background: #fafcff;
+    }
+
+    .edit-modal-content .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .edit-modal-content .modal-actions .btn {
+      flex: 1;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    @keyframes fadeIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .history-actions {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    /* ===== АДАПТИВНОСТЬ ===== */
+
+    /* Планшеты и маленькие ноутбуки */
+    @media (max-width: 1024px) {
+      .main {
+        padding: 16px;
+      }
+      .form-group {
+        flex: 1 0 120px;
+        min-width: 100px;
+      }
+      .card {
+        padding: 16px;
+      }
+    }
+
+    /* Телефоны и маленькие планшеты */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 280px;
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-close {
+        display: block;
+      }
+
+      .menu-toggle {
+        display: block;
+      }
+
+      .main {
+        margin-left: 0;
+        padding: 16px;
+        padding-top: 70px;
+        background: #f4f7fc;
+      }
+
+      .main.full-width {
+        margin-left: 0;
+      }
+
+      h1 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+        color: #1e2a3a;
+      }
+
+      .card {
+        padding: 14px;
+        border-radius: 12px;
+        margin-bottom: 14px;
+        background: white;
+      }
+
+      .card h3 {
+        color: #1e2a3a;
+      }
+
+      .card-body {
+        padding-top: 12px;
+      }
+
+      .form-row {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .form-group {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .form-group input,
+      .form-group select {
+        font-size: 16px;
+        padding: 12px 14px;
+        background: #fafcff;
+        color: #1e2a3a;
+        border-color: #d0d9e5;
+      }
+
+      .form-group label {
+        color: #3a4a5a;
+      }
+
+      .btn {
+        padding: 12px 16px;
+        font-size: 1rem;
+        width: 100%;
+        justify-content: center;
+      }
+
+      .btn-sm {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        min-width: 36px;
+        min-height: 36px;
+        width: auto;
+      }
+
+      .list-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .filter-group {
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .filter-group select,
+      .filter-group input {
+        width: 100%;
+        min-width: 0;
+        font-size: 16px;
+        background: white;
+        color: #1e2a3a;
+        border-color: #d0d9e5;
+      }
+
+      .badge {
+        font-size: 0.9rem;
+        padding: 8px 14px;
+        width: 100%;
+        justify-content: space-between;
+        background: #eef3f9;
+        color: #1e2a3a;
+      }
+
+      .badge .action-btn {
+        font-size: 1rem;
+        padding: 4px 8px;
+        color: #5a6a7a;
+      }
+
+      table {
+        font-size: 0.8rem;
+        min-width: 400px;
+      }
+
+      th {
+        color: #2a3a4a;
+        border-bottom-color: #dce3ec;
+      }
+
+      td {
+        color: #1e2a3a;
+        border-bottom-color: #e8edf4;
+      }
+
+      .edit-modal-content {
+        padding: 20px;
+        margin: 12px;
+        border-radius: 16px;
+        background: white;
+      }
+
+      .edit-modal-content h3 {
+        color: #1e2a3a;
+      }
+
+      .edit-modal-content .form-group label {
+        color: #3a4a5a;
+      }
+
+      .edit-modal-content .form-group input,
+      .edit-modal-content .form-group select {
+        color: #1e2a3a;
+        background: #fafcff;
+        border-color: #d0d9e5;
+      }
+
+      .edit-modal-content .modal-actions .btn {
+        flex: 1;
+        min-width: 60px;
+        padding: 12px 16px;
+      }
+
+      .confirm-toast {
+        bottom: 16px;
+        left: 16px;
+        right: 16px;
+        padding: 14px 16px;
+        font-size: 0.9rem;
+        border-radius: 12px;
+      }
+
+      .history-actions {
+        flex-direction: row;
+      }
+
+      .history-actions .btn-sm {
+        flex: 1;
+        min-width: 30px;
+      }
+
+      .btn-outline {
+        color: #1e2a3a;
+        border-color: #b0c4d9;
+      }
+
+      .empty-state {
+        color: #7a8a9a;
+      }
+
+      .card-header .toggle-icon {
+        font-size: 1.4rem;
+        padding: 8px 12px;
+      }
+    }
+
+    /* Очень маленькие телефоны */
+    @media (max-width: 400px) {
+      .main {
+        padding: 10px;
+        padding-top: 64px;
+      }
+
+      .card {
+        padding: 12px;
+        border-radius: 10px;
+      }
+
+      h1 {
+        font-size: 1.1rem;
+      }
+
+      .sidebar {
+        width: 100%;
+        max-width: 320px;
+      }
+
+      table {
+        font-size: 0.7rem;
+        min-width: 320px;
+      }
+
+      th,
+      td {
+        padding: 6px 4px;
+      }
+
+      .badge {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+      }
+
+      .edit-modal-content {
+        padding: 16px;
+      }
+
+      .edit-modal-content h3 {
+        font-size: 1rem;
+      }
+    }
+
+    /* Альбомная ориентация на телефонах */
+    @media (max-width: 900px) and (orientation: landscape) {
+      .sidebar {
+        width: 240px;
+      }
+
+      .main {
+        padding-top: 16px;
+        margin-left: 0;
+      }
+
+      .form-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+
+      .form-group {
+        flex: 1 0 140px;
+        min-width: 120px;
+      }
+
+      .btn {
+        width: auto;
+      }
+
+      .menu-toggle {
+        top: 8px;
+        left: 8px;
+        padding: 6px 10px;
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Кнопка-гамбургер -->
+  <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню">☰</button>
+
+  <!-- Боковое меню -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2>🚛 Автопарк</h2>
+      <button class="sidebar-close" id="sidebarClose" aria-label="Закрыть меню">✕</button>
+    </div>
+    <button class="active" data-page="journal">📋 Журнал</button>
+    <button data-page="directories">📚 Справочники</button>
+  </div>
+
+  <div class="main" id="mainContent">
+    <!-- СТРАНИЦА ЖУРНАЛА -->
+    <div id="page-journal" class="page active">
+      <h1>Журнал учёта</h1>
+      
+      <!-- Сворачиваемый блок "Новая запись" -->
+      <div class="card">
+        <div class="card-header" onclick="toggleNewEntry()">
+          <h3>➕ Новая запись</h3>
+          <span class="toggle-icon collapsed" id="toggleIcon">▼</span>
+        </div>
+        <div class="card-body collapsed" id="newEntryBody">
+          <div class="form-row" id="entryForm">
+            <div class="form-group">
+              <label>Водитель</label>
+              <select id="driverSelect"><option value="">— выберите —</option></select>
+            </div>
+            <div class="form-group">
+              <label>Машина</label>
+              <select id="carSelect"><option value="">— выберите —</option></select>
+            </div>
+            <div class="form-group">
+              <label>Объект</label>
+              <select id="objectSelect"><option value="">— выберите —</option></select>
+            </div>
+            <div class="form-group" style="flex: 0 0 auto; width: 100%;">
+              <button class="btn btn-block" id="createEntryBtn">✔ Создать запись</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="list-header">
+          <h3>📋 История</h3>
+          <div class="filter-group">
+            <select id="filterDriver"><option value="">Все водители</option></select>
+            <select id="filterCar"><option value="">Все машины</option></select>
+            <select id="filterObject"><option value="">Все объекты</option></select>
+            <input type="date" id="filterDate">
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Дата/время</th><th>Водитель</th><th>Машина</th><th>Объект</th><th>Действия</th></tr>
+            </thead>
+            <tbody id="historyBody">
+              <tr><td colspan="5" class="empty-state">Нет записей</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- СТРАНИЦА СПРАВОЧНИКОВ -->
+    <div id="page-directories" class="page">
+      <h1>Справочники</h1>
+      <!-- Водители -->
+      <div class="card">
+        <h3>👤 Водители</h3>
+        <div class="form-row">
+          <div class="form-group"><input type="text" id="newDriver" placeholder="Имя водителя"></div>
+          <div class="form-group"><button class="btn btn-block" id="addDriverBtn">➕ Добавить</button></div>
+        </div>
+        <div id="driverList" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      </div>
+      <!-- Машины -->
+      <div class="card">
+        <h3>🚗 Машины</h3>
+        <div class="form-row">
+          <div class="form-group"><input type="text" id="newCar" placeholder="Госномер / модель"></div>
+          <div class="form-group"><button class="btn btn-block" id="addCarBtn">➕ Добавить</button></div>
+        </div>
+        <div id="carList" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      </div>
+      <!-- Объекты -->
+      <div class="card">
+        <h3>📍 Объекты</h3>
+        <div class="form-row">
+          <div class="form-group"><input type="text" id="newObject" placeholder="Название объекта"></div>
+          <div class="form-group"><button class="btn btn-block" id="addObjectBtn">➕ Добавить</button></div>
+        </div>
+        <div id="objectList" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно для редактирования -->
+  <div id="editModal" class="edit-modal" style="display: none;">
+    <div class="edit-modal-content">
+      <h3 id="editModalTitle">Редактировать</h3>
+      <div class="form-group">
+        <label id="editModalLabel">Название</label>
+        <input type="text" id="editModalInput">
+      </div>
+      <div id="historyEditSelects" style="display: none;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeEditModal()">Отмена</button>
+        <button class="btn btn-success" id="saveEditBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== ИНИЦИАЛИЗАЦИЯ FIREBASE =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyBTs9U1sAmeP5uHcnrE03zsGxN82cXf_Ps",
+      authDomain: "uchetavtoparka.firebaseapp.com",
+      projectId: "uchetavtoparka",
+      storageBucket: "uchetavtoparka.firebasestorage.app",
+      messagingSenderId: "624861407591",
+      appId: "1:624861407591:web:5ece452ab7d6253c40a7c2",
+      measurementId: "G-FRPTRYQZQQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // ===== ССЫЛКИ НА УЗЛЫ =====
+    const driversRef = db.ref('drivers');
+    const carsRef = db.ref('cars');
+    const objectsRef = db.ref('objects');
+    const historyRef = db.ref('history');
+
+    // ===== СОСТОЯНИЕ =====
+    let drivers = [];
+    let cars = [];
+    let objects = [];
+    let historyEntries = [];
+
+    // ===== СВОРАЧИВАНИЕ БЛОКА "НОВАЯ ЗАПИСЬ" =====
+    let isNewEntryOpen = false;
+
+    function toggleNewEntry() {
+      isNewEntryOpen = !isNewEntryOpen;
+      const body = document.getElementById('newEntryBody');
+      const icon = document.getElementById('toggleIcon');
+      
+      if (isNewEntryOpen) {
+        body.classList.remove('collapsed');
+        icon.classList.remove('collapsed');
+        icon.textContent = '▼';
+      } else {
+        body.classList.add('collapsed');
+        icon.classList.add('collapsed');
+        icon.textContent = '▼';
+      }
+    }
+
+    // ===== МЕНЮ =====
+    const sidebar = document.getElementById('sidebar');
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebarClose = document.getElementById('sidebarClose');
+    const mainContent = document.getElementById('mainContent');
+
+    function toggleMenu() {
+      sidebar.classList.toggle('open');
+      const isOpen = sidebar.classList.contains('open');
+      menuToggle.textContent = isOpen ? '✕' : '☰';
+      document.body.style.overflow = isOpen ? 'hidden' : '';
+    }
+
+    function closeMenu() {
+      sidebar.classList.remove('open');
+      menuToggle.textContent = '☰';
+      document.body.style.overflow = '';
+    }
+
+    menuToggle.addEventListener('click', toggleMenu);
+    sidebarClose.addEventListener('click', closeMenu);
+
+    // Закрытие меню при клике вне
+    document.addEventListener('click', (e) => {
+      if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && e.target !== menuToggle) {
+          closeMenu();
+        }
+      }
+    });
+
+    // ===== ВСПОМОГАТЕЛЬНЫЕ =====
+    function getSelect(selId) { return document.getElementById(selId); }
+
+    function fillSelect(selectEl, items, labelKey = 'name') {
+      const currentVal = selectEl.value;
+      selectEl.innerHTML = '<option value="">— выберите —</option>';
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item[labelKey] || item.name || 'Без имени';
+        selectEl.appendChild(opt);
+      });
+      if (currentVal && [...selectEl.options].some(o => o.value === currentVal)) {
+        selectEl.value = currentVal;
+      }
+    }
+
+    function renderChips(containerId, items, labelKey = 'name', ref) {
+      const container = document.getElementById(containerId);
+      if (items.length === 0) {
+        container.innerHTML = '<span style="color: #7a8a9a; font-size: 0.85rem;">Нет записей</span>';
+        return;
+      }
+      container.innerHTML = items.map(item => {
+        const displayName = item[labelKey] || item.name || 'Без имени';
+        return `<span class="badge">
+          <span style="flex:1; word-break: break-word;">${displayName}</span>
+          <span>
+            <button class="action-btn" onclick="editItem('${containerId}', '${item.id}', '${labelKey}')" title="Редактировать">✏️</button>
+            <button class="action-btn delete" onclick="deleteItem('${containerId}', '${item.id}')" title="Удалить">✖</button>
+          </span>
+        </span>`;
+      }).join('');
+    }
+
+    function showToast(msg, isError = false) {
+      const existing = document.querySelector('.confirm-toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `confirm-toast ${isError ? 'error-toast' : ''}`;
+      toast.textContent = isError ? `❌ ${msg}` : `✅ ${msg}`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+    }
+
+    // ===== МОДАЛЬНОЕ ОКНО =====
+    let editContext = { ref: null, id: null, field: null, containerId: null, isHistory: false };
+
+    function openEditModal(title, label, value, ref, id, field, containerId) {
+      document.getElementById('editModalTitle').textContent = title;
+      document.getElementById('editModalLabel').textContent = label;
+      document.getElementById('editModalInput').value = value;
+      document.getElementById('editModalInput').style.display = 'block';
+      document.getElementById('historyEditSelects').style.display = 'none';
+      document.getElementById('historyEditSelects').innerHTML = '';
+      editContext = { ref, id, field, containerId, isHistory: false };
+      document.getElementById('editModal').style.display = 'flex';
+      setTimeout(() => document.getElementById('editModalInput').focus(), 100);
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').style.display = 'none';
+      document.getElementById('historyEditSelects').innerHTML = '';
+      document.getElementById('editModalInput').style.display = 'block';
+      editContext = { ref: null, id: null, field: null, containerId: null, isHistory: false };
+    }
+
+    document.getElementById('saveEditBtn').addEventListener('click', () => {
+      const { ref, id, field, containerId, isHistory } = editContext;
+      if (!ref || !id) return;
+
+      if (isHistory) {
+        // Сохранение истории обрабатывается отдельно
+        return;
+      }
+
+      const newValue = document.getElementById('editModalInput').value.trim();
+      if (!newValue) {
+        showToast('Значение не может быть пустым', true);
+        return;
+      }
+      ref.child(id).update({ [field]: newValue })
+        .then(() => {
+          showToast('Запись обновлена');
+          closeEditModal();
+        })
+        .catch(err => {
+          showToast('Ошибка обновления', true);
+          console.error(err);
+        });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeEditModal();
+      if (e.key === 'Enter' && document.getElementById('editModal').style.display !== 'none') {
+        document.getElementById('saveEditBtn').click();
+      }
+    });
+
+    // Закрытие модалки при клике вне
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeEditModal();
+    });
+
+    // ===== ЗАГРУЗКА ДАННЫХ =====
+    function loadAll() {
+      driversRef.on('value', snap => {
+        drivers = [];
+        snap.forEach(child => {
+          drivers.push({ id: child.key, ...child.val() });
+        });
+        fillSelect(getSelect('driverSelect'), drivers);
+        fillSelect(getSelect('filterDriver'), drivers);
+        renderChips('driverList', drivers, 'name', driversRef);
+      });
+
+      carsRef.on('value', snap => {
+        cars = [];
+        snap.forEach(child => {
+          cars.push({ id: child.key, ...child.val() });
+        });
+        fillSelect(getSelect('carSelect'), cars, 'model');
+        fillSelect(getSelect('filterCar'), cars, 'model');
+        renderChips('carList', cars, 'model', carsRef);
+      });
+
+      objectsRef.on('value', snap => {
+        objects = [];
+        snap.forEach(child => {
+          objects.push({ id: child.key, ...child.val() });
+        });
+        fillSelect(getSelect('objectSelect'), objects);
+        fillSelect(getSelect('filterObject'), objects);
+        renderChips('objectList', objects, 'name', objectsRef);
+      });
+
+      historyRef.orderByChild('timestamp').on('value', snap => {
+        historyEntries = [];
+        snap.forEach(child => {
+          historyEntries.push({ id: child.key, ...child.val() });
+        });
+        renderHistory();
+      });
+    }
+
+    // ===== ОТРИСОВКА ИСТОРИИ С ФИЛЬТРАМИ =====
+    function renderHistory() {
+      const driverFilter = document.getElementById('filterDriver').value;
+      const carFilter = document.getElementById('filterCar').value;
+      const objectFilter = document.getElementById('filterObject').value;
+      const dateFilter = document.getElementById('filterDate').value;
+
+      let filtered = [...historyEntries];
+      if (driverFilter) filtered = filtered.filter(e => e.driverId === driverFilter);
+      if (carFilter) filtered = filtered.filter(e => e.carId === carFilter);
+      if (objectFilter) filtered = filtered.filter(e => e.objectId === objectFilter);
+      if (dateFilter) {
+        const d = new Date(dateFilter);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const end = start + 86400000;
+        filtered = filtered.filter(e => e.timestamp >= start && e.timestamp < end);
+      }
+
+      filtered.sort((a, b) => b.timestamp - a.timestamp);
+
+      const tbody = document.getElementById('historyBody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Нет записей</td></tr>`;
+        return;
+      }
+
+      const getLabel = (list, id, fallback = '—') => {
+        const found = list.find(item => item.id === id);
+        return found ? (found.name || found.model || '—') : fallback;
+      };
+
+      tbody.innerHTML = filtered.map(entry => {
+        const date = new Date(entry.timestamp);
+        const dateStr = date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        const driverName = getLabel(drivers, entry.driverId);
+        const carName = getLabel(cars, entry.carId, '—');
+        const objectName = getLabel(objects, entry.objectId, '—');
+        return `<tr>
+          <td><strong style="font-size:0.75rem;">${dateStr}</strong></td>
+          <td>${driverName}</td>
+          <td>${carName}</td>
+          <td>${objectName}</td>
+          <td>
+            <div class="history-actions">
+              <button class="btn btn-sm btn-outline" onclick="editHistoryEntry('${entry.id}')" title="Редактировать">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteHistoryEntry('${entry.id}')" title="Удалить">✖</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ===== РЕДАКТИРОВАНИЕ В СПРАВОЧНИКАХ =====
+    function editItem(containerId, id, field) {
+      let ref, title, label, items;
+      if (containerId === 'driverList') {
+        ref = driversRef;
+        items = drivers;
+        title = 'Редактировать водителя';
+        label = 'Имя водителя';
+      } else if (containerId === 'carList') {
+        ref = carsRef;
+        items = cars;
+        title = 'Редактировать машину';
+        label = 'Модель / госномер';
+      } else if (containerId === 'objectList') {
+        ref = objectsRef;
+        items = objects;
+        title = 'Редактировать объект';
+        label = 'Название объекта';
+      } else {
+        return;
+      }
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      openEditModal(title, label, item[field] || '', ref, id, field, containerId);
+    }
+
+    // ===== УДАЛЕНИЕ В СПРАВОЧНИКАХ =====
+    function deleteItem(containerId, id) {
+      if (!confirm('Удалить эту запись?')) return;
+      let ref;
+      if (containerId === 'driverList') ref = driversRef;
+      else if (containerId === 'carList') ref = carsRef;
+      else if (containerId === 'objectList') ref = objectsRef;
+      else return;
+
+      ref.child(id).remove()
+        .then(() => showToast('Запись удалена'))
+        .catch(err => {
+          showToast('Ошибка удаления', true);
+          console.error(err);
+        });
+    }
+
+    // ===== РЕДАКТИРОВАНИЕ В ИСТОРИИ =====
+    function editHistoryEntry(id) {
+      const entry = historyEntries.find(e => e.id === id);
+      if (!entry) return;
+
+      const modal = document.getElementById('editModal');
+      document.getElementById('editModalTitle').textContent = 'Редактировать запись';
+      document.getElementById('editModalLabel').textContent = 'Выберите новые значения:';
+      document.getElementById('editModalInput').style.display = 'none';
+
+      const selectContainer = document.getElementById('historyEditSelects');
+      selectContainer.style.display = 'block';
+      selectContainer.innerHTML = `
+        <div class="form-group">
+          <label>Водитель</label>
+          <select id="editHistoryDriver">${document.getElementById('driverSelect').innerHTML}</select>
+        </div>
+        <div class="form-group">
+          <label>Машина</label>
+          <select id="editHistoryCar">${document.getElementById('carSelect').innerHTML}</select>
+        </div>
+        <div class="form-group">
+          <label>Объект</label>
+          <select id="editHistoryObject">${document.getElementById('objectSelect').innerHTML}</select>
+        </div>
+      `;
+
+      setTimeout(() => {
+        document.getElementById('editHistoryDriver').value = entry.driverId || '';
+        document.getElementById('editHistoryCar').value = entry.carId || '';
+        document.getElementById('editHistoryObject').value = entry.objectId || '';
+      }, 10);
+
+      modal.style.display = 'flex';
+      editContext = { ref: historyRef, id: id, field: null, containerId: null, isHistory: true };
+
+      // Переопределяем обработчик сохранения
+      const saveBtn = document.getElementById('saveEditBtn');
+      const newSaveHandler = () => {
+        const driverId = document.getElementById('editHistoryDriver').value;
+        const carId = document.getElementById('editHistoryCar').value;
+        const objectId = document.getElementById('editHistoryObject').value;
+
+        if (!driverId || !carId || !objectId) {
+          showToast('Заполните все поля', true);
+          return;
+        }
+
+        historyRef.child(id).update({
+          driverId: driverId,
+          carId: carId,
+          objectId: objectId
+        }).then(() => {
+          showToast('Запись обновлена');
+          closeEditModal();
+        }).catch(err => {
+          showToast('Ошибка обновления', true);
+          console.error(err);
+        });
+      };
+
+      saveBtn.replaceWith(saveBtn.cloneNode(true));
+      document.getElementById('saveEditBtn').addEventListener('click', newSaveHandler);
+    }
+
+    // ===== УДАЛЕНИЕ В ИСТОРИИ =====
+    function deleteHistoryEntry(id) {
+      if (!confirm('Удалить эту запись из истории?')) return;
+      historyRef.child(id).remove()
+        .then(() => showToast('Запись удалена'))
+        .catch(err => {
+          showToast('Ошибка удаления', true);
+          console.error(err);
+        });
+    }
+
+    // ===== СОЗДАНИЕ ЗАПИСИ =====
+    function createEntry() {
+      const driverId = document.getElementById('driverSelect').value;
+      const carId = document.getElementById('carSelect').value;
+      const objectId = document.getElementById('objectSelect').value;
+
+      if (!driverId || !carId || !objectId) {
+        showToast('Заполните все поля!', true);
+        return;
+      }
+
+      const driverName = drivers.find(d => d.id === driverId)?.name || 'Водитель';
+      const carName = cars.find(c => c.id === carId)?.model || 'Машина';
+      const objectName = objects.find(o => o.id === objectId)?.name || 'Объект';
+
+      const newEntry = {
+        driverId,
+        carId,
+        objectId,
+        timestamp: Date.now(),
+        timestampISO: new Date().toISOString()
+      };
+
+      historyRef.push(newEntry).then(() => {
+        showToast(`Запись: ${driverName} → ${carName} → ${objectName}`);
+        if (window.innerWidth <= 768) closeMenu();
+        // Автоматически сворачиваем блок после создания записи
+        if (isNewEntryOpen) {
+          toggleNewEntry();
+        }
+      }).catch(err => {
+        showToast('Ошибка сохранения', true);
+        console.error(err);
+      });
+    }
+
+    // ===== ДОБАВЛЕНИЕ В СПРАВОЧНИКИ =====
+    function addItem(ref, inputId, nameKey = 'name', itemName = 'элемент') {
+      const input = document.getElementById(inputId);
+      const val = input.value.trim();
+      if (!val) {
+        showToast(`Введите название ${itemName}`, true);
+        return;
+      }
+      ref.push({ [nameKey]: val }).then(() => {
+        input.value = '';
+        showToast(`Добавлено: ${val}`);
+        if (window.innerWidth <= 768) closeMenu();
+      }).catch(err => {
+        showToast('Ошибка добавления', true);
+        console.error(err);
+      });
+    }
+
+    // ===== НАВИГАЦИЯ =====
+    document.querySelectorAll('.sidebar button[data-page]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar button[data-page]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const pageId = 'page-' + btn.dataset.page;
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        if (window.innerWidth <= 768) closeMenu();
+      });
+    });
+
+    // ===== ПОДПИСКИ НА ФИЛЬТРЫ =====
+    document.getElementById('filterDriver').addEventListener('change', renderHistory);
+    document.getElementById('filterCar').addEventListener('change', renderHistory);
+    document.getElementById('filterObject').addEventListener('change', renderHistory);
+    document.getElementById('filterDate').addEventListener('change', renderHistory);
+
+    // ===== ОБРАБОТЧИКИ =====
+    document.getElementById('createEntryBtn').addEventListener('click', createEntry);
+    document.getElementById('addDriverBtn').addEventListener('click', () => addItem(driversRef, 'newDriver', 'name', 'водителя'));
+    document.getElementById('addCarBtn').addEventListener('click', () => addItem(carsRef, 'newCar', 'model', 'машины'));
+    document.getElementById('addObjectBtn').addEventListener('click', () => addItem(objectsRef, 'newObject', 'name', 'объекта'));
+
+    // ===== СЕССИЯ 20 МИНУТ =====
+    const SESSION_KEY = 'park_session_start';
+    function checkSession() {
+      const now = Date.now();
+      const start = parseInt(sessionStorage.getItem(SESSION_KEY) || '0');
+      if (!start || (now - start) > 20 * 60 * 1000) {
+        sessionStorage.setItem(SESSION_KEY, String(now));
+        showToast('Сессия обновлена');
+      }
+    }
+    checkSession();
+    setInterval(checkSession, 60 * 1000);
+
+    // ===== ЗАПУСК =====
+    loadAll();
+
+    // Исправление для iOS Safari
+    document.addEventListener('touchstart', function() {}, { passive: true });
+  </script>
+</body>
+</html>
